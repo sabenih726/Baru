@@ -9,7 +9,7 @@ from utils import get_greeting, get_binary_file_downloader_html
 st.set_page_config(page_title="Ekstraksi & Rename PDF Dokumen Imigrasi", layout="wide")
 
 # Judul Aplikasi
-st.markdown(f"## {get_greeting()}, Selamat datang di Aplikasi Ekstraksi Dokumen Imigrasi 🇮🇩")
+st.markdown(f"## {get_greeting()}, Semoga Ibu Direktur Senang Dengan Aplikasi Ini")
 st.markdown("---")
 
 # Pilih mode: PDF biasa atau OCR paspor
