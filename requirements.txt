@@ -1,7 +1,7 @@
 streamlit
 easyocr
 numpy
-Pillow
+pillow
 pandas
 xlsxwriter
 PyMuPDF
