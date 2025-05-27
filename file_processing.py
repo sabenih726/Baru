@@ -1,7 +1,15 @@
+import os
+import io
+import tempfile
+import zipfile
 import fitz  # PyMuPDF
-from extractors import extract_sktt, extract_evln
+import pdfplumber
+import pandas as pd
+from extractors import extract_sktt, extract_evln, extract_itas, extract_itk, extract_notifikasi
 from utils import generate_new_filename
 
+
+# Fungsi untuk membaca teks dari PDF dengan pdfplumber
 def extract_text_from_pdf(pdf_path):
     doc = fitz.open(pdf_path)
     full_text = ""
@@ -9,21 +17,22 @@ def extract_text_from_pdf(pdf_path):
         full_text += page.get_text()
     return full_text
 
+
 # Fungsi untuk memproses file PDF
 def process_pdfs(uploaded_files, doc_type, use_name, use_passport):
     all_data = []
     renamed_files = {}
-    
-    # Buat folder sementara untuk menyimpan file
+
+    # Buat folder sementara untuk menyimpan file hasil sementara
     temp_dir = tempfile.mkdtemp()
-    
+
     for uploaded_file in uploaded_files:
-        # Baca isi file PDF
+        # Baca teks dari PDF
         with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
             texts = [page.extract_text() for page in pdf.pages if page.extract_text()]
             full_text = "\n".join(texts)
-        
-        # Ekstraksi data sesuai jenis dokumen
+
+        # Ekstraksi data berdasarkan tipe dokumen
         if doc_type == "SKTT":
             extracted_data = extract_sktt(full_text)
         elif doc_type == "EVLN":
@@ -36,32 +45,32 @@ def process_pdfs(uploaded_files, doc_type, use_name, use_passport):
             extracted_data = extract_notifikasi(full_text)
         else:
             extracted_data = {}
-        
+
         all_data.append(extracted_data)
-        
-        # Buat nama file baru
+
+        # Generate nama file baru
         new_filename = generate_new_filename(extracted_data, use_name, use_passport)
-        
-        # Simpan file dengan nama baru di folder sementara
+
+        # Simpan file dengan nama baru di direktori sementara
         temp_file_path = os.path.join(temp_dir, new_filename)
+        uploaded_file.seek(0)
         with open(temp_file_path, 'wb') as f:
-            # Reset file pointer dan tulis file asli dengan nama baru
-            uploaded_file.seek(0)
             f.write(uploaded_file.read())
-        
+
         renamed_files[uploaded_file.name] = {'new_name': new_filename, 'path': temp_file_path}
-    
-    # Buat DataFrame dari data yang diekstrak
+
+    # Buat DataFrame dari hasil ekstraksi
     df = pd.DataFrame(all_data)
-    
+
     # Simpan DataFrame ke Excel
     excel_path = os.path.join(temp_dir, "Hasil_Ekstraksi.xlsx")
     df.to_excel(excel_path, index=False)
-    
-    # Buat ZIP dari semua file yang direname
-    zip_path = os.path.join(temp_dir, "Renamed_Files.zip")
-    with zipfile.ZipFile(zip_path, 'w') as zipf:
+
+    # Buat file ZIP dari file-file PDF yang telah dinamai ulang + Excel
+    zip_path = os.path.join(temp_dir, "Hasil_Ekstraksi.zip")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(excel_path, arcname="Hasil_Ekstraksi.xlsx")
         for file_info in renamed_files.values():
             zipf.write(file_info['path'], arcname=file_info['new_name'])
-    
+
     return df, excel_path, renamed_files, zip_path, temp_dir
