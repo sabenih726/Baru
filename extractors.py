@@ -2,22 +2,6 @@ import fitz  # PyMuPDF
 from utils import clean_text, split_birth_place_date
 import re
 
-def extract_data(pdf_bytes, doc_type, original_filename):
-    text = extract_text_from_pdf(pdf_bytes)
-
-    if doc_type == "SKTT":
-        return extract_sktt(text, original_filename)
-    elif doc_type == "EVLN":
-        return extract_evln(text, original_filename)
-    elif doc_type == "ITAS":
-        return extract_itas(text, original_filename)
-    elif doc_type == "ITK":
-        return extract_itk(text, original_filename)
-    elif doc_type == "Notifikasi":
-        return extract_notifikasi(text, original_filename)
-    else:
-        return {}, original_filename
-
 def extract_text_from_pdf(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     text = "\n".join(page.get_text() for page in doc)
