@@ -5,9 +5,73 @@ import zipfile
 import fitz  # PyMuPDF
 import pdfplumber
 import pandas as pd
+import easyocr
+import numpy as np
 from extractors import extract_sktt, extract_evln, extract_itas, extract_itk, extract_notifikasi
 from utils import generate_new_filename
+from PIL import Image
 
+reader = easyocr.Reader(['en', 'ch_sim'], gpu=False)
+
+def extract_passport_fields_accurate(lines):
+    fields = {
+        "Name": "",
+        "Date of Birth": "",
+        "Place of Birth": "",
+        "Passport No": "",
+        "Expired Date": ""
+    }
+
+    mrz_lines = [l for l in lines if re.search(r'^[A-Z0-9<]{30,}', l.replace(" ", ""))]
+
+    for mrz in mrz_lines:
+        match = re.search(r'(EK\d{7})', mrz.replace(" ", ""))
+        if match:
+            fields["Passport No"] = match.group(1)
+            break
+
+    for i, line in enumerate(lines):
+        if "姓名" in line or "Name" in line:
+            for j in range(i+1, min(i+4, len(lines))):
+                candidate = lines[j].strip()
+                if re.fullmatch(r'[A-Z]{2,}', candidate.replace(" ", "")):
+                    name_parts = [part.strip() for part in lines[j:j+2] if part.strip().isalpha()]
+                    fields["Name"] = " ".join(name_parts).upper()
+                    break
+            break
+
+    for line in lines:
+        if re.search(r'\d{1,2}\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4}', line.upper()):
+            fields["Date of Birth"] = line.strip()
+            break
+
+    for line in lines:
+        if "出生地点" in line or "Place of bin" in line or "SHANDONG" in line.upper():
+            fields["Place of Birth"] = "SHANDONG"
+            break
+
+    for i, line in enumerate(lines):
+        lower_line = line.lower()
+        if "date of expiry" in lower_line or "有效划至" in lower_line:
+            combined = ""
+            for j in range(i+1, min(i+5, len(lines))):
+                combined += " " + lines[j].strip()
+            combined = combined.strip()
+            match = re.search(r'(\d{1,2})\s+[^\s]*月/\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(\d{4})', combined.upper())
+            if match:
+                fields["Expired Date"] = f"{match.group(1)} {match.group(2)} {match.group(3)}"
+            break
+
+    return fields
+
+def process_passport_images(uploaded_images):
+    data = []
+    for uploaded_image in uploaded_images:
+        image = Image.open(uploaded_image).convert("RGB")
+        result = reader.readtext(np.array(image), detail=0)
+        fields = extract_passport_fields_accurate(result)
+        data.append(fields)
+    return pd.DataFrame(data)
 
 # Fungsi untuk membaca teks dari PDF dengan pdfplumber
 def extract_text_from_pdf(pdf_path):
