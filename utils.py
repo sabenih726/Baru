@@ -41,3 +41,33 @@ def generate_new_filename(extracted_data, use_name=True, use_passport=True):
     base_name = " ".join(parts) if parts else "RENAMED"
     
     return f"{base_name}.pdf"
+
+# Fungsi untuk membersihkan teks (dari kode asli Anda)
+def clean_text(text, is_name_or_pob=False):
+    text = re.sub(r"Reference No|Payment Receipt No|Jenis Kelamin|Kewarganegaraan|Pekerjaan|Alamat", "", text)
+    if is_name_or_pob:
+        text = re.sub(r"\.", "", text)
+    text = re.sub(r"[^A-Za-z0-9\s,./-]", "", text).strip()
+    return " ".join(text.split())
+# Fungsi untuk membagi tempat dan tanggal lahir
+def split_birth_place_date(text):
+    if text:
+        parts = text.split(", ")
+        if len(parts) == 2:
+            return parts[0].strip(), format_date(parts[1])
+    return text, None
+# Salam waktu otomatis
+def get_greeting():
+    hour = datetime.now().hour
+    if 5 <= hour < 12:
+        return "Selamat Pagi"
+    elif 12 <= hour < 17:
+        return "Selamat Siang"
+    else:
+        return "Selamat Malam"
+
+# Fungsi untuk membuat link download
+def get_binary_file_downloader_html(bin_data, file_label='File', button_text='Download'):
+    bin_str = base64.b64encode(bin_data).decode()
+    href = f'<a href="data:application/octet-stream;base64,{bin_str}" download="{file_label}" style="text-decoration:none;"><button style="background-color:#4CAF50; color:white; padding:10px 20px; border:none; border-radius:4px; cursor:pointer;">{button_text}</button></a>'
+    return href
