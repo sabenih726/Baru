@@ -1,5 +1,6 @@
 import fitz  # PyMuPDF
 from utils import clean_text, split_birth_place_date
+import re
 
 def extract_data(pdf_bytes, doc_type, original_filename):
     text = extract_text_from_pdf(pdf_bytes)
