@@ -96,6 +96,23 @@ st.markdown("""
         padding: 30px;
         background: rgba(59, 130, 246, 0.05);
         text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .stFileUploader > div:hover {
+        border-color: #1d4ed8;
+        background: rgba(59, 130, 246, 0.1);
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderDropzone"] {
+        min-height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .stProgress > div > div {
+        background: linear-gradient(90deg, #3b82f6, #1d4ed8);
     }
     
     .stAlert {
@@ -145,15 +162,49 @@ if mode == "Ekstraksi PDF Dokumen":
 
     # Upload file PDF
     st.markdown('<h3 class="section-header">📁 Upload File PDF</h3>', unsafe_allow_html=True)
-    uploaded_files = st.file_uploader("Drag & drop file PDF di sini atau klik untuk browse", type=["pdf"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "Drag & drop file PDF di sini atau klik untuk browse", 
+        type=["pdf"], 
+        accept_multiple_files=True,
+        key="pdf_uploader"
+    )
 
-    # Tombol proses
-    if st.button("🚀 Mulai Proses Ekstraksi") and uploaded_files:
-        with st.spinner("⏳ Memproses file... Harap tunggu."):
+    # Tampilkan info file yang diupload
+    if uploaded_files:
+        st.info(f"📄 {len(uploaded_files)} file PDF berhasil diupload")
+        with st.expander("👁️ Lihat daftar file", expanded=False):
+            for i, file in enumerate(uploaded_files, 1):
+                file_size = len(file.getvalue()) / (1024 * 1024)  # Convert to MB
+                st.write(f"{i}. **{file.name}** ({file_size:.2f} MB)")
+
+    # Tombol proses - disabled jika tidak ada file
+    process_disabled = not uploaded_files
+    
+    if st.button("🚀 Mulai Proses Ekstraksi", disabled=process_disabled):
+        if uploaded_files:
+            # Progress bar
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
             try:
+                status_text.text("⏳ Memulai proses ekstraksi...")
+                progress_bar.progress(10)
+                
+                status_text.text("📄 Memproses file PDF...")
+                progress_bar.progress(30)
+                
                 df, excel_path, renamed_files, zip_path, temp_dir = process_pdfs(
                     uploaded_files, doc_type, use_name, use_passport
                 )
+                
+                progress_bar.progress(90)
+                status_text.text("✅ Menyelesaikan proses...")
+                progress_bar.progress(100)
+                
+                # Clear progress indicators
+                progress_bar.empty()
+                status_text.empty()
+                
                 st.success("✅ Ekstraksi selesai!")
 
                 # Tampilkan tabel hasil
@@ -187,20 +238,68 @@ if mode == "Ekstraksi PDF Dokumen":
                     st.markdown(f"**{old_name}** ➡️ `{info['new_name']}`")
 
             except Exception as e:
-                st.error(f"❌ Terjadi kesalahan: {str(e)}")
+                # Clear progress indicators on error
+                progress_bar.empty()
+                status_text.empty()
+                st.error(f"❌ Terjadi kesalahan saat memproses PDF: {str(e)}")
+                st.error("💡 **Tips troubleshooting:**")
+                st.write("- Pastikan file PDF tidak corrupt atau password-protected")
+                st.write("- Coba dengan file PDF yang lebih kecil")
+                st.write("- Pastikan file PDF berisi teks yang bisa diekstrak")
+        else:
+            st.error("❌ Tidak ada file yang diupload!")
 
-    elif uploaded_files:
+    
+    # Info untuk user
+    if not uploaded_files:
+        st.warning("⚠️ Silakan upload file PDF terlebih dahulu")
+    elif process_disabled:
         st.info("💡 Klik tombol **Mulai Proses Ekstraksi** untuk memulai.")
 
 # OCR Paspor Section
 elif mode == "OCR Paspor Tiongkok":
     st.markdown('<h3 class="section-header">🖼️ Upload Gambar Paspor</h3>', unsafe_allow_html=True)
-    uploaded_images = st.file_uploader("Upload gambar paspor (JPEG/PNG)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    uploaded_images = st.file_uploader(
+        "Upload gambar paspor (JPEG/PNG)", 
+        type=["jpg", "jpeg", "png"], 
+        accept_multiple_files=True,
+        key="image_uploader"
+    )
+    
+    # Tampilkan info gambar yang diupload
+    if uploaded_images:
+        st.info(f"🖼️ {len(uploaded_images)} gambar berhasil diupload")
+        with st.expander("👁️ Lihat daftar gambar", expanded=False):
+            for i, img in enumerate(uploaded_images, 1):
+                img_size = len(img.getvalue()) / (1024 * 1024)  # Convert to MB
+                st.write(f"{i}. **{img.name}** ({img_size:.2f} MB)")
 
-    if st.button("🔎 Mulai OCR") and uploaded_images:
-        with st.spinner("⏳ Memproses gambar paspor..."):
+    # Tombol OCR - disabled jika tidak ada gambar
+    ocr_disabled = not uploaded_images
+    
+    if st.button("🔎 Mulai OCR", disabled=ocr_disabled):
+        if uploaded_images:
+            # Progress bar untuk OCR
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
             try:
+                status_text.text("⏳ Memulai proses OCR...")
+                progress_bar.progress(10)
+                
+                status_text.text("🖼️ Memproses gambar paspor...")
+                progress_bar.progress(30)
+                
                 df_ocr = process_passport_images(uploaded_images)
+                
+                progress_bar.progress(90)
+                status_text.text("✅ Menyelesaikan OCR...")
+                progress_bar.progress(100)
+                
+                # Clear progress indicators
+                progress_bar.empty()
+                status_text.empty()
+                
                 st.success("✅ Ekstraksi OCR selesai!")
 
                 st.markdown('<h3 class="section-header">📊 Hasil Ekstraksi Paspor</h3>', unsafe_allow_html=True)
@@ -219,9 +318,19 @@ elif mode == "OCR Paspor Tiongkok":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             except Exception as e:
-                st.error(f"❌ Terjadi kesalahan: {str(e)}")
+                # Clear progress indicators on error
+                progress_bar.empty()
+                status_text.empty()
+                st.error(f"❌ Terjadi kesalahan saat OCR: {str(e)}")
+                st.error("💡 **Tips troubleshooting:**")
+                st.write("- Pastikan gambar berkualitas baik dan tidak blur")
+                st.write("- Pastikan format file adalah JPG, JPEG, atau PNG")
+                st.write("- Coba dengan gambar yang lebih kecil jika file terlalu besar")
     
-    elif uploaded_images:
+    # Info untuk user OCR
+    if not uploaded_images:
+        st.warning("⚠️ Silakan upload gambar paspor terlebih dahulu")
+    elif uploaded_images and not st.session_state.get('ocr_processed', False):
         st.info("💡 Klik tombol **Mulai OCR** untuk memulai proses ekstraksi.")
 
 st.markdown('</div>', unsafe_allow_html=True)
