@@ -10,10 +10,20 @@ import numpy as np
 from extractors import extract_sktt, extract_evln, extract_itas, extract_itk, extract_notifikasi
 from utils import generate_new_filename
 from PIL import Image
+import re  # <--- Tambahkan ini
 
 reader = easyocr.Reader(['en', 'ch_sim'], gpu=False)
 
 def extract_passport_fields_accurate(lines):
+    if not lines or not isinstance(lines, list):
+        return {
+            "Name": "",
+            "Date of Birth": "",
+            "Place of Birth": "",
+            "Passport No": "",
+            "Expired Date": ""
+        }
+
     fields = {
         "Name": "",
         "Date of Birth": "",
