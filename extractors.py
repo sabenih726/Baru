@@ -1,6 +1,28 @@
 import fitz  # PyMuPDF
 from utils import clean_text, split_birth_place_date
 import re
+from datetime import datetime
+
+def format_date(date_str):
+    """
+    Format tanggal menjadi 'YYYY-MM-DD'.
+    Mencoba beberapa format umum tanggal.
+    Jika gagal parsing, kembalikan string asli.
+    """
+    if not date_str:
+        return None
+
+    date_str = date_str.strip()
+    formats = ["%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d %B %Y", "%d %b %Y"]  # bisa tambah format lain jika perlu
+
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    # Jika tidak cocok format apapun, return as is
+    return date_str
 
 def extract_text_from_pdf(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -116,7 +138,7 @@ def extract_itas(text):
 
     return data
 
-# Ekstraksi ITK
+# Ekstraksi ITK (mirip ITAS)
 def extract_itk(text):
     data = {}
 
