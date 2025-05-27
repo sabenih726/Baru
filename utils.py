@@ -1,4 +1,5 @@
 import re
+import base64
 from datetime import datetime
 
 # Sanitize nama file
