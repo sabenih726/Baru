@@ -7,31 +7,33 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart, QrCode } from "lucide-react"
+import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { getProducts, saveTransaction, generateTransactionId, type Product } from "@/lib/localStorage"
-import { QRCodeSVG } from 'qrcode.react'
+import { updateMultipleProductStock } from "@/lib/inventory-utils"
+import { QRCodeSVG } from "qrcode.react"
 
 interface CartItem extends Product {
   quantity: number
   subtotal: number
 }
 
-const defaultProducts: Product[] = [
-  { id: "1", name: "Roti Tawar", price: 12000 },
-  { id: "2", name: "Roti Coklat", price: 15000 },
-  { id: "3", name: "Roti Keju", price: 18000 },
-  { id: "4", name: "Croissant", price: 25000 },
-  { id: "5", name: "Donat Gula", price: 8000 },
-  { id: "6", name: "Donat Coklat", price: 10000 },
-  { id: "7", name: "Roti Pisang", price: 13000 },
-  { id: "8", name: "Roti Abon", price: 16000 },
+// Default products dengan stok
+const defaultProductsWithStock: Product[] = [
+  { id: "1", name: "Roti Tawar", price: 12000, stock: 50 },
+  { id: "2", name: "Roti Coklat", price: 15000, stock: 30 },
+  { id: "3", name: "Roti Keju", price: 18000, stock: 25 },
+  { id: "4", name: "Croissant", price: 25000, stock: 15 },
+  { id: "5", name: "Donat Gula", price: 8000, stock: 40 },
+  { id: "6", name: "Donat Coklat", price: 10000, stock: 35 },
+  { id: "7", name: "Roti Pisang", price: 13000, stock: 20 },
+  { id: "8", name: "Roti Abon", price: 16000, stock: 18 },
 ]
 
 export default function TransaksiPage() {
   const router = useRouter()
-  const [products, setProducts] = useState<Product[]>(defaultProducts)
+  const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedProduct, setSelectedProduct] = useState("")
   const [quantity, setQuantity] = useState(1)
@@ -42,17 +44,23 @@ export default function TransaksiPage() {
   const [showQRCode, setShowQRCode] = useState(false)
 
   useEffect(() => {
-    // Load products from localStorage
-    const savedProducts = localStorage.getItem("products")
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts))
-    } else {
-      localStorage.setItem("products", JSON.stringify(defaultProducts))
-    }
-  }, [])
-
-  useEffect(() => {
     loadProducts()
+
+    // Initialize products with stock if they don't have stock field
+    const savedProducts = getProducts()
+    const needsStockUpdate = savedProducts.some((p) => p.stock === undefined)
+
+    if (needsStockUpdate) {
+      const updatedProducts = savedProducts.map((product) => {
+        const defaultProduct = defaultProductsWithStock.find((dp) => dp.id === product.id)
+        return {
+          ...product,
+          stock: product.stock ?? (defaultProduct?.stock || 0),
+        }
+      })
+      localStorage.setItem("products", JSON.stringify(updatedProducts))
+      setProducts(updatedProducts)
+    }
   }, [])
 
   const loadProducts = () => {
@@ -73,16 +81,30 @@ export default function TransaksiPage() {
     const product = products.find((p) => p.id === selectedProduct)
     if (!product) return
 
+    // ✅ VALIDASI STOK SEBELUM MENAMBAH KE CART
+    if (product.stock !== undefined && product.stock < quantity) {
+      alert(`Stok tidak mencukupi! Stok tersedia: ${product.stock}`)
+      return
+    }
+
     const existingItem = cart.find((item) => item.id === selectedProduct)
 
     if (existingItem) {
+      const newQuantity = existingItem.quantity + quantity
+
+      // ✅ VALIDASI TOTAL QUANTITY DI CART
+      if (product.stock !== undefined && product.stock < newQuantity) {
+        alert(`Stok tidak mencukupi! Stok tersedia: ${product.stock}, sudah di cart: ${existingItem.quantity}`)
+        return
+      }
+
       setCart(
         cart.map((item) =>
           item.id === selectedProduct
             ? {
                 ...item,
-                quantity: item.quantity + quantity,
-                subtotal: (item.quantity + quantity) * item.price,
+                quantity: newQuantity,
+                subtotal: newQuantity * item.price,
               }
             : item,
         ),
@@ -105,6 +127,13 @@ export default function TransaksiPage() {
   const updateQuantity = (id: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeFromCart(id)
+      return
+    }
+
+    // ✅ VALIDASI STOK SAAT UPDATE QUANTITY
+    const product = products.find((p) => p.id === id)
+    if (product?.stock !== undefined && product.stock < newQuantity) {
+      alert(`Stok tidak mencukupi! Stok tersedia: ${product.stock}`)
       return
     }
 
@@ -131,32 +160,27 @@ export default function TransaksiPage() {
   const generatePaymentQR = () => {
     const transactionId = Date.now().toString().slice(-8)
     const amount = getTotalAmount()
-    
-    // Load payment settings
+
     const savedSettings = localStorage.getItem("paymentSettings")
     const settings = savedSettings ? JSON.parse(savedSettings) : null
-    
+
     if (paymentMethod === "qris") {
       if (settings && settings.qrisMerchantId) {
-        // Format QRIS resmi sesuai standar ISO 20022
         const merchantId = settings.qrisMerchantId
         const merchantName = settings.qrisMerchantName || "Toko Roti Bahagia"
-        
-        // Format QRIS resmi untuk GoPay
-        // Ini adalah format standar yang dapat dibaca oleh semua aplikasi e-wallet
-        return `00020101021226580014ID.CO.QRIS.WWW${merchantId.length.toString().padStart(2, '0')}${merchantId}52044814530336054${amount.toString().padStart(10, '0').slice(-10)}5802ID5913${merchantName}6006JAKARTA62070503${transactionId}6304`
+
+        return `00020101021226580014ID.CO.QRIS.WWW${merchantId.length.toString().padStart(2, "0")}${merchantId}52044814530336054${amount.toString().padStart(10, "0").slice(-10)}5802ID5913${merchantName}6006JAKARTA62070503${transactionId}6304`
       } else {
-        // Fallback jika belum ada Merchant ID
-        return `QRIS:DEMO:${transactionId}:${amount}:${cart.map(item => `${item.name}x${item.quantity}`).join(',')}`
+        return `QRIS:DEMO:${transactionId}:${amount}:${cart.map((item) => `${item.name}x${item.quantity}`).join(",")}`
       }
     } else {
-      // Format transfer bank
       const bankName = settings?.bankName || "BCA"
       const accountNumber = settings?.accountNumber || "1234567890"
       return `TRANSFER:${bankName}:${accountNumber}:${amount}:${transactionId}:Toko Roti Bahagia`
     }
   }
 
+  // ✅ FUNGSI PROCESSTRANSACTION YANG SUDAH DIPERBAIKI
   const processTransaction = async () => {
     if (cart.length === 0) return
 
@@ -184,12 +208,25 @@ export default function TransaksiPage() {
         change: paymentMethod === "tunai" ? getChange() : 0,
       }
 
-      // Save transaction (hanya sekali)
+      // ✅ 1. SIMPAN TRANSAKSI
       console.log("Saving transaction:", transactionId)
       saveTransaction(transaction)
       console.log("Transaction saved successfully")
 
-      // Redirect to receipt page
+      // ✅ 2. UPDATE STOK PRODUK (INI YANG HILANG!)
+      console.log("Updating product stock...")
+      const stockUpdates = cart.map((item) => ({
+        id: item.id,
+        quantity: item.quantity,
+      }))
+
+      updateMultipleProductStock(stockUpdates)
+      console.log("Stock updated successfully")
+
+      // ✅ 3. REFRESH PRODUCTS STATE
+      loadProducts()
+
+      // ✅ 4. REDIRECT KE STRUK
       router.push(`/struk/${transactionId}`)
     } catch (error) {
       console.error("Error processing transaction:", error)
@@ -228,7 +265,24 @@ export default function TransaksiPage() {
                   <SelectContent>
                     {products.map((product) => (
                       <SelectItem key={product.id} value={product.id}>
-                        {product.name} - {formatCurrency(product.price)}
+                        <div className="flex justify-between items-center w-full">
+                          <span>
+                            {product.name} - {formatCurrency(product.price)}
+                          </span>
+                          {product.stock !== undefined && (
+                            <span
+                              className={`ml-2 text-xs px-2 py-1 rounded ${
+                                product.stock === 0
+                                  ? "bg-red-100 text-red-600"
+                                  : product.stock < 10
+                                    ? "bg-orange-100 text-orange-600"
+                                    : "bg-green-100 text-green-600"
+                              }`}
+                            >
+                              Stok: {product.stock}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -286,7 +340,7 @@ export default function TransaksiPage() {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 w-8"
+                          className="h-8 w-8 bg-transparent"
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         >
                           <Minus className="h-3 w-3" />
@@ -295,7 +349,7 @@ export default function TransaksiPage() {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 w-8"
+                          className="h-8 w-8 bg-transparent"
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
                         >
                           <Plus className="h-3 w-3" />
@@ -303,7 +357,7 @@ export default function TransaksiPage() {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-700"
+                          className="h-8 w-8 text-red-500 hover:text-red-700 bg-transparent"
                           onClick={() => removeFromCart(item.id)}
                         >
                           <Trash2 className="h-3 w-3" />
@@ -345,14 +399,17 @@ export default function TransaksiPage() {
 
               <div className="space-y-2">
                 <Label>Metode Pembayaran</Label>
-                <Select value={paymentMethod} onValueChange={(value) => {
-                  setPaymentMethod(value)
-                  if (value === "qris" || value === "transfer") {
-                    setShowQRCode(true)
-                  } else {
-                    setShowQRCode(false)
-                  }
-                }}>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(value) => {
+                    setPaymentMethod(value)
+                    if (value === "qris" || value === "transfer") {
+                      setShowQRCode(true)
+                    } else {
+                      setShowQRCode(false)
+                    }
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -392,54 +449,27 @@ export default function TransaksiPage() {
                   <div className="text-center">
                     <Label>Scan QR Code untuk Pembayaran</Label>
                   </div>
-                  
+
                   <div className="flex justify-center">
                     <div className="p-4 bg-white border-2 border-gray-300 rounded-lg">
-                      <QRCodeSVG 
-                        value={generatePaymentQR()} 
-                        size={200}
-                        level="M"
-                        includeMargin={true}
-                      />
+                      <QRCodeSVG value={generatePaymentQR()} size={200} level="M" includeMargin={true} />
                     </div>
                   </div>
-                  
+
                   <div className="text-center space-y-2">
                     <p className="text-sm text-gray-600">
-                      {paymentMethod === "qris" ? "Scan dengan aplikasi e-wallet (GoPay, OVO, Dana, dll)" : "Scan untuk transfer bank"}
+                      {paymentMethod === "qris"
+                        ? "Scan dengan aplikasi e-wallet (GoPay, OVO, Dana, dll)"
+                        : "Scan untuk transfer bank"}
                     </p>
                     <p className="font-bold text-lg">{formatCurrency(getTotalAmount())}</p>
-                    <p className="text-xs text-gray-500">
-                      ID Transaksi: #{Date.now().toString().slice(-6)}
-                    </p>
-                    {paymentMethod === "qris" && (
-                      <div className="mt-2">
-                        {(() => {
-                          const savedSettings = localStorage.getItem("paymentSettings")
-                          const settings = savedSettings ? JSON.parse(savedSettings) : null
-                          return settings?.qrisMerchantId ? (
-                            <p className="text-xs text-green-600 font-medium">
-                              ✓ QRIS Resmi Aktif - Merchant: {settings.qrisMerchantName}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-orange-600 font-medium">
-                              ⚠️ Mode Demo - Silakan set Merchant ID di Pengaturan
-                            </p>
-                          )
-                        })()}
-                      </div>
-                    )}
+                    <p className="text-xs text-gray-500">ID Transaksi: #{Date.now().toString().slice(-6)}</p>
                   </div>
 
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <p className="text-sm text-blue-800">
                       💡 Setelah pembayaran berhasil, klik tombol "Selesai" untuk mencetak struk
                     </p>
-                    {paymentMethod === "qris" && (
-                      <p className="text-xs text-blue-600 mt-1">
-                        QR code ini dapat di-scan oleh semua aplikasi e-wallet yang mendukung QRIS
-                      </p>
-                    )}
                   </div>
                 </div>
               )}
