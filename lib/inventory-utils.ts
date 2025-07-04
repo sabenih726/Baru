@@ -1,4 +1,4 @@
-import { getProducts } from "./path-to-getProducts" // Declare or import the getProducts function
+import { getProducts, saveProducts } from "@/lib/localStorage"
 
 // Tambahkan fungsi untuk update stok setelah transaksi
 export const updateProductStock = (productId: string, quantitySold: number) => {
@@ -13,7 +13,7 @@ export const updateProductStock = (productId: string, quantitySold: number) => {
     return product
   })
 
-  localStorage.setItem("products", JSON.stringify(updatedProducts))
+  saveProducts(updatedProducts)
   return updatedProducts
 }
 
@@ -31,6 +31,6 @@ export const updateMultipleProductStock = (items: Array<{ id: string; quantity: 
     return product
   })
 
-  localStorage.setItem("products", JSON.stringify(updatedProducts))
+  saveProducts(updatedProducts)
   return updatedProducts
 }
